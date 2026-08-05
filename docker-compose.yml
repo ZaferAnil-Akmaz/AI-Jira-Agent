@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      JIRA_PROVIDER: ${JIRA_PROVIDER:-mock}
+      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-PROD}
