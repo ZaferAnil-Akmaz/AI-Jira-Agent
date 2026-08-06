@@ -4,16 +4,25 @@ Turn product requirements into reviewable, Jira-ready work items—with a human 
 
 [Documentation](docs/architecture.md) · [MIT License](LICENSE)
 
-## Author
+---
 
-**Zafer Anıl Akmaz**  
-Product Manager | AI & Product Management
+# Author
 
-[LinkedIn](https://www.linkedin.com/in/zaferanilakmaz/)
+**Zafer Anıl Akmaz**
 
-## License
+Product Manager • AI • Product Development
 
-MIT, see [LICENSE](LICENSE).
+* GitHub: https://github.com/ZaferAnil-Akmaz
+* LinkedIn: https://www.linkedin.com/in/zaferanilakmaz/
+
+---
+# License
+
+This project is licensed under the MIT License.
+
+See the **LICENSE** file for details.
+
+---
 
 ## Overview
 
