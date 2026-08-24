@@ -12,6 +12,60 @@ export const featureTypes = [
   "maintenance",
 ] as const;
 export type FeatureType = (typeof featureTypes)[number];
+export const capabilityStatuses = [
+  "existing",
+  "missing",
+  "unknown",
+  "requires_validation",
+  "not_applicable",
+] as const;
+export type CapabilityStatus = (typeof capabilityStatuses)[number];
+export const workstreamStatuses = [
+  "required",
+  "not_required",
+  "recommended",
+  "requires_validation",
+  "not_applicable",
+] as const;
+export type WorkstreamStatus = (typeof workstreamStatuses)[number];
+
+export interface RepositoryContext {
+  apiInventory?: string[];
+  dataModels?: string[];
+  services?: string[];
+  frontendRoutes?: string[];
+  components?: string[];
+  analyticsEvents?: string[];
+  authentication?: string;
+  notes?: string;
+}
+
+export interface CapabilityAssessment {
+  capability: string;
+  status: CapabilityStatus;
+  rationale: string;
+  evidence?: string;
+}
+
+export interface WorkstreamDecision {
+  workstream: TaskType;
+  status: WorkstreamStatus;
+  rationale: string;
+}
+
+export interface PlanningWarning {
+  code:
+    | "BACKEND_CAPABILITY_CONFLICT"
+    | "FRONTEND_SCOPE_CONFLICT"
+    | "ANALYTICS_SCOPE_CONFLICT"
+    | "QA_COVERAGE"
+    | "DUPLICATE_SCOPE"
+    | "INVALID_DEPENDENCY"
+    | "MISSING_TASK_RATIONALE"
+    | "UNKNOWN_ARCHITECTURE";
+  message: string;
+  taskId?: string;
+}
 
 export interface WorkTask {
   id: string;
@@ -20,7 +74,10 @@ export interface WorkTask {
   description: string;
   acceptanceCriteria: string[];
   priority: Priority;
-  dependencies?: string[];
+  rationale: string;
+  dependsOn: string[];
+  assumptions?: string[];
+  risks?: string[];
 }
 
 export interface WorkBreakdown {
@@ -35,11 +92,19 @@ export interface WorkBreakdown {
     userProblem: string;
     businessGoal: string;
     actor: string;
+    desiredOutcome: string;
+    scope: string[];
+    explicitRequirements: string[];
+    implicitRequirements: string[];
     functionalRequirements: string[];
     nonFunctionalRequirements: string[];
     risks: string[];
     ambiguities: string[];
   };
+  repositoryContext?: RepositoryContext;
+  capabilityAnalysis: CapabilityAssessment[];
+  workstreamDecisions: WorkstreamDecision[];
+  warnings: PlanningWarning[];
   language: OutputLanguage;
   featureType: FeatureType;
   epicRecommendation: {

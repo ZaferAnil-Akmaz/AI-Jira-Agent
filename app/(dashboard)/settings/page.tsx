@@ -18,7 +18,7 @@ export default function SettingsPage() {
         <dl className="settings-list">
           <dt>AI provider</dt>
           <dd>
-            <code>AI_PROVIDER=mock | openai</code>
+            <code>AI_PROVIDER=mock | openai | gemini</code>
           </dd>
           <dt>Jira provider</dt>
           <dd>

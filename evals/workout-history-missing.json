@@ -1,0 +1,10 @@
+{
+  "requirement": "Users should have a page where they can track their workouts.",
+  "context": "",
+  "language": "en",
+  "expected": {
+    "requiredWorkstreams": ["design", "frontend", "backend", "qa"],
+    "backendRequired": true,
+    "expectedDependencies": ["frontend-workout-tracking", "backend-workout-tracking"]
+  }
+}

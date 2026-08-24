@@ -10,6 +10,7 @@ import {
 import { analytics } from "@/server/services/analytics/analytics";
 import { getConfig } from "@/server/config/env";
 import { getRuntimeJiraSettings } from "@/server/services/jira/runtime-settings";
+import { resolveJiraIssueType } from "@/server/services/jira/issue-type-mapping";
 
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
@@ -40,7 +41,12 @@ export async function POST(request: NextRequest) {
       epic || !input.epic
         ? await Promise.allSettled(
             input.issues.map((issue) =>
-              service.createIssue({ ...issue, projectKey, parentKey: epic?.key }),
+              service.createIssue({
+                ...issue,
+                issueType: resolveJiraIssueType(issue.workstream, issue.issueType),
+                projectKey,
+                parentKey: epic?.key,
+              }),
             ),
           )
         : [];

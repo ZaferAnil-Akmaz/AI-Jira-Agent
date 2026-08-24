@@ -1,0 +1,10 @@
+{
+  "requirement": "Mesajlaşma özelliği geliştirmek istiyorum.",
+  "context": "",
+  "language": "tr",
+  "expected": {
+    "requiredWorkstreams": ["backend", "frontend", "qa"],
+    "backendRequired": true,
+    "expectedDependencies": ["frontend-messaging-experience", "backend-messaging-capability"]
+  }
+}

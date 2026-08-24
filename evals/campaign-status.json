@@ -1,0 +1,10 @@
+{
+  "requirement": "Partners need to manage campaign status from a dedicated page.",
+  "context": "",
+  "language": "en",
+  "expected": {
+    "requiredWorkstreams": ["design", "frontend", "backend", "qa"],
+    "backendRequired": true,
+    "expectedDependencies": ["frontend-campaign-management", "backend-campaign-management"]
+  }
+}

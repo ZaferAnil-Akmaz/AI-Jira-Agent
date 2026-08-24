@@ -1,0 +1,10 @@
+{
+  "requirement": "Create an API endpoint for importing payment history from the finance service.",
+  "context": "",
+  "language": "en",
+  "expected": {
+    "requiredWorkstreams": ["backend", "qa"],
+    "backendRequired": true,
+    "expectedDependencies": ["backend-product-feature"]
+  }
+}

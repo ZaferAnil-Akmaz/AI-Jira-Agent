@@ -1,4 +1,4 @@
-import type { GenerateRequest } from "@/lib/validation/schemas";
+import type { GenerateRequest, ReviseTaskRequest } from "@/lib/validation/schemas";
 import type { AIProvider } from "@/server/providers/ai/types";
 import type {
   FeatureType,
@@ -7,6 +7,10 @@ import type {
   WorkBreakdown,
   WorkTask,
 } from "@/types/domain";
+import {
+  buildMockMessagingPlan,
+  isMessagingRequirement,
+} from "@/server/providers/ai/mock-messaging-plan";
 
 type Feature = {
   tr: string;
@@ -32,7 +36,12 @@ function detectType(text: string): FeatureType {
   return "new_feature";
 }
 function feature(input: GenerateRequest): Feature {
-  const value = `${input.requirement} ${input.context}`.toLowerCase();
+  const repositoryFacts = Object.values(input.repositoryContext ?? {})
+    .flatMap((value) => (Array.isArray(value) ? value : [value ?? ""]))
+    .join(" ");
+  const value = `${input.requirement} ${input.context} ${repositoryFacts}`.toLowerCase();
+  const existingWorkoutCapability =
+    /workout.*(api|service|model|persistence)|antrenman.*(api|servis|model|veri)/.test(value);
   const tracking =
     /beslenme|nutrition/.test(value) && /antreman|antrenman|workout|exercise/.test(value);
   if (tracking)
@@ -43,7 +52,9 @@ function feature(input: GenerateRequest): Feature {
       actorEn: "Users",
       labels: ["nutrition-tracking", "workout-tracking"],
       hasUi: true,
-      hasBackend: /api|endpoint|kaydet|oluştur|create|update|güncelle|veri modeli/.test(value),
+      hasBackend:
+        !existingWorkoutCapability &&
+        /api|endpoint|kaydet|oluştur|create|update|güncelle|veri modeli/.test(value),
     };
   if (/antreman|antrenman|workout|exercise/.test(value))
     return {
@@ -53,8 +64,8 @@ function feature(input: GenerateRequest): Feature {
       actorEn: "Users",
       labels: ["workout-tracking"],
       hasUi: true,
-      // Data source, persistence and user ownership are unknown; explicitly plan their assessment.
-      hasBackend: true,
+      // A supplied API/model/persistence fact is evidence; otherwise capability is unresolved.
+      hasBackend: !existingWorkoutCapability,
     };
   const campaign = /kampanya|campaign/.test(value) && /durum|status/.test(value);
   if (campaign)
@@ -141,6 +152,10 @@ function work(type: TaskType, f: Feature, language: OutputLanguage, themed: bool
             "Responsive and accessibility behavior is documented.",
           ],
       priority: "medium",
+      rationale: isTr
+        ? "Kullanıcıların takip bilgisini tarayabilmesi için bilgi mimarisi ve temel durumların uygulamadan önce netleşmesi gerekir."
+        : "Information architecture and key states must be defined before implementation so users can scan tracking information.",
+      dependsOn: [],
     },
     frontend: {
       title: isTr ? `${title} Frontend Geliştirmesi` : `Implement the ${title} Frontend`,
@@ -159,6 +174,10 @@ function work(type: TaskType, f: Feature, language: OutputLanguage, themed: bool
             "The page works at supported viewport sizes.",
           ],
       priority: "high",
+      rationale: isTr
+        ? "Kullanıcı ihtiyacını karşılayan görünür deneyim, takip bilgisinin okunabilir şekilde sunulmasını gerektirir."
+        : "The user need requires a visible experience that presents tracking information clearly.",
+      dependsOn: [],
     },
     backend: {
       title: isTr
@@ -177,6 +196,10 @@ function work(type: TaskType, f: Feature, language: OutputLanguage, themed: bool
             "If a new endpoint is required, authorization and validation are implemented.",
           ],
       priority: "high",
+      rationale: isTr
+        ? "Kullanıcıya ait takip verisinin kaynağı ve erişim kuralları doğrulanmadan frontend güvenilir biçimde entegre edilemez."
+        : "The frontend cannot integrate reliably until the source and access rules for user-specific tracking data are validated.",
+      dependsOn: [],
     },
     qa: {
       title: isTr
@@ -197,7 +220,10 @@ function work(type: TaskType, f: Feature, language: OutputLanguage, themed: bool
             "Regression impact on existing functionality is checked.",
           ],
       priority: "medium",
-      dependencies: f.hasBackend ? ["frontend", "backend"] : ["frontend"],
+      rationale: isTr
+        ? "Teslim edilen deneyimin veri doğruluğu, hata yönetimi ve regression etkileri kullanıcıya açılmadan doğrulanmalıdır."
+        : "Data accuracy, error handling, and regression impact must be verified before the experience is released.",
+      dependsOn: [],
     },
     analytics: {
       title: isTr ? `${title} Kullanım Analitiği` : `Measure ${title} Usage`,
@@ -208,6 +234,10 @@ function work(type: TaskType, f: Feature, language: OutputLanguage, themed: bool
         ? ["Gerekli event'ler dokümante edilmiştir."]
         : ["Required events are documented."],
       priority: "low",
+      rationale: isTr
+        ? "Ürün davranışı ölçülmek istenirse, event tasarımı anlamlı kullanıcı etkileşimlerine bağlanmalıdır."
+        : "If product behavior is measured, event design must be tied to meaningful user interactions.",
+      dependsOn: [],
     },
   };
   return { id: type, type, ...tasks[type] };
@@ -215,6 +245,8 @@ function work(type: TaskType, f: Feature, language: OutputLanguage, themed: bool
 
 export class MockAIProvider implements AIProvider {
   async generateWorkBreakdown(input: GenerateRequest): Promise<WorkBreakdown> {
+    if (isMessagingRequirement(input)) return buildMockMessagingPlan(input);
+
     const isTr = tr(input.language);
     const f = feature(input);
     const type = detectType(input.requirement);
@@ -229,6 +261,76 @@ export class MockAIProvider implements AIProvider {
     const workoutOnly = f.tr === "Antrenman Takip Sayfası";
     const subjectTr = workoutOnly ? "antrenman" : "beslenme ve antrenman";
     const subjectEn = workoutOnly ? "workout" : "nutrition and workout";
+    const taskIdByType = Object.fromEntries(
+      teams.map((team) => [team, `${team}-${f.labels[0] ?? "delivery"}`]),
+    ) as Partial<Record<TaskType, string>>;
+    const tasks = teams.map((team) => {
+      const task = work(team, f, input.language, theme);
+      const dependsOn =
+        team === "frontend"
+          ? [
+              ...(taskIdByType.design ? [taskIdByType.design] : []),
+              ...(taskIdByType.backend ? [taskIdByType.backend] : []),
+            ]
+          : team === "qa"
+            ? [
+                ...(taskIdByType.frontend ? [taskIdByType.frontend] : []),
+                ...(taskIdByType.backend ? [taskIdByType.backend] : []),
+              ]
+            : team === "analytics" && taskIdByType.frontend
+              ? [taskIdByType.frontend]
+              : [];
+      return { ...task, id: taskIdByType[team]!, dependsOn };
+    });
+    const workstreamDecisions: WorkBreakdown["workstreamDecisions"] = [
+      {
+        workstream: "design",
+        status: teams.includes("design") ? "required" : "not_applicable",
+        rationale: teams.includes("design")
+          ? isTr
+            ? "Yeni kullanıcı deneyimi, bilgi mimarisi ve durum tasarımı gerektiriyor."
+            : "The new user experience requires information architecture and state design."
+          : isTr
+            ? "İstenen kapsam yeni bir UX tasarımı gerektirmiyor."
+            : "The requested scope does not require new UX design.",
+      },
+      {
+        workstream: "frontend",
+        status: teams.includes("frontend") ? "required" : "not_applicable",
+        rationale: teams.includes("frontend")
+          ? isTr
+            ? "Kullanıcıya görünür takip deneyimi frontend uygulaması gerektirir."
+            : "A user-facing tracking experience requires frontend implementation."
+          : isTr
+            ? "İstenen kapsam kullanıcı arayüzü içermiyor."
+            : "The requested scope has no user-facing interface.",
+      },
+      {
+        workstream: "backend",
+        status: teams.includes("backend") ? "requires_validation" : "not_required",
+        rationale: teams.includes("backend")
+          ? isTr
+            ? "Veri kaynağı ve kullanıcı sahipliği doğrulanmadan yeni capability gerekip gerekmediği belirlenemez."
+            : "Whether new capability is needed cannot be determined until the data source and ownership are validated."
+          : isTr
+            ? "Sağlanan context mevcut backend capability'nin yeterli olduğunu gösteriyor."
+            : "The supplied context indicates that existing backend capability is sufficient.",
+      },
+      {
+        workstream: "qa",
+        status: teams.includes("qa") ? "required" : "not_applicable",
+        rationale: isTr
+          ? "Kullanıcı akışı, veri doğruluğu ve hata durumları doğrulanmalıdır."
+          : "The user flow, data accuracy, and failure states require validation.",
+      },
+      {
+        workstream: "analytics",
+        status: "not_applicable",
+        rationale: isTr
+          ? "Ölçülecek ürün davranışı veya başarı metriği requirement içinde tanımlanmamıştır."
+          : "The requirement does not identify measurable product behavior or a success metric.",
+      },
+    ];
     return {
       summary: title,
       problemStatement: isTr
@@ -279,7 +381,7 @@ export class MockAIProvider implements AIProvider {
         : isTr
           ? ["QA, frontend teslimatını doğrular."]
           : ["QA verifies frontend delivery."],
-      tasks: teams.map((team) => work(team, f, input.language, theme)),
+      tasks,
       analysis: {
         userProblem: isTr
           ? `${subjectTr.charAt(0).toLocaleUpperCase("tr") + subjectTr.slice(1)} takip bilgileri için anlaşılır bir kullanıcı yüzeyi bulunmuyor.`
@@ -288,6 +390,20 @@ export class MockAIProvider implements AIProvider {
           ? "Takip verilerini anlaşılır ve güvenilir bir deneyimde sunmak."
           : "Present tracking information in a clear and reliable experience.",
         actor: isTr ? f.actorTr : f.actorEn,
+        desiredOutcome: isTr
+          ? `${subjectTr.charAt(0).toLocaleUpperCase("tr") + subjectTr.slice(1)} kayıtlarını anlaşılır biçimde incelemek.`
+          : `Review ${subjectEn.toLowerCase()} records clearly.`,
+        scope: isTr
+          ? ["Kayıtları görüntüleme", "Temel durum yönetimi", "Responsive kullanıcı deneyimi"]
+          : ["Record viewing", "Core state handling", "Responsive user experience"],
+        explicitRequirements: isTr
+          ? [
+              `${subjectTr.charAt(0).toLocaleUpperCase("tr") + subjectTr.slice(1)} için bir kullanıcı sayfası.`,
+            ]
+          : [`A user page for ${subjectEn.toLowerCase()} tracking.`],
+        implicitRequirements: isTr
+          ? ["Kullanıcıya ait verinin güvenli gösterimi", "Boş ve hata durumlarının yönetimi"]
+          : ["Secure presentation of user-specific data", "Empty and error state handling"],
         functionalRequirements: isTr
           ? workoutOnly
             ? ["Antrenman kayıtları ve mevcut detay bilgileri gösterilir."]
@@ -337,6 +453,55 @@ export class MockAIProvider implements AIProvider {
                   : "Whether new backend/API capability is needed must be confirmed after reviewing existing data sources.",
               ],
       },
+      repositoryContext: input.repositoryContext,
+      capabilityAnalysis: [
+        {
+          capability: isTr ? "Kimlik doğrulama" : "Authentication",
+          status: input.repositoryContext?.authentication ? "existing" : "unknown",
+          rationale: input.repositoryContext?.authentication
+            ? isTr
+              ? "Sağlanan repository context kimlik doğrulama bilgisini içeriyor."
+              : "The supplied repository context includes authentication information."
+            : isTr
+              ? "Repository context sağlanmadığı için kimlik doğrulama capability'si doğrulanmalıdır."
+              : "Authentication capability must be validated because no repository context was supplied.",
+          evidence: input.repositoryContext?.authentication,
+        },
+        {
+          capability: isTr ? "Antrenman API / veri kaynağı" : "Workout API / data source",
+          status: f.hasBackend ? "requires_validation" : "existing",
+          rationale: f.hasBackend
+            ? isTr
+              ? "Mevcut API veya persistence bilgisi sağlanmadı."
+              : "No existing API or persistence information was supplied."
+            : isTr
+              ? "Sağlanan context mevcut antrenman capability'sine işaret ediyor."
+              : "The supplied context indicates existing workout capability.",
+        },
+        {
+          capability: isTr ? "Kullanıcı-veri sahipliği" : "User-data ownership",
+          status: input.repositoryContext?.authentication ? "requires_validation" : "unknown",
+          rationale: isTr
+            ? "Kayıtların yalnızca ilgili kullanıcıya sunulduğu doğrulanmalıdır."
+            : "It must be validated that records are exposed only to the relevant user.",
+        },
+        {
+          capability: isTr ? "Frontend takip sayfası" : "Frontend tracking page",
+          status: "missing",
+          rationale: isTr
+            ? "Requirement yeni bir kullanıcı deneyimi talep ediyor."
+            : "The requirement asks for a new user-facing experience.",
+        },
+        {
+          capability: isTr ? "Analitik capability'si" : "Analytics capability",
+          status: "not_applicable",
+          rationale: isTr
+            ? "Requirement ölçülecek bir davranış veya metrik belirtmiyor."
+            : "The requirement does not identify behavior or a metric to measure.",
+        },
+      ],
+      workstreamDecisions,
+      warnings: [],
       language: input.language,
       featureType: type,
       epicRecommendation:
@@ -359,6 +524,25 @@ export class MockAIProvider implements AIProvider {
             }
           : null,
       labels: [...f.labels, ...(theme ? ["red-white-theme"] : [])],
+    };
+  }
+
+  async reviseTask(input: ReviseTaskRequest): Promise<WorkTask> {
+    const isTr = tr(input.language);
+    const instruction = input.instruction.trim();
+    const moreSpecific = /specific|detay|kapsamlı|comprehensive/i.test(instruction);
+    return {
+      ...input.task,
+      description: `${input.task.description}\n\nRevision Notes\n${isTr ? "Bu task, kullanıcının hedeflenen revizyon talebine göre daraltıldı ve uygulanabilirlik açısından gözden geçirildi." : "This task was refined against the requested revision and reviewed for implementation readiness."}`,
+      acceptanceCriteria: moreSpecific
+        ? [
+            ...input.task.acceptanceCriteria,
+            isTr
+              ? "Beklenen davranış ilgili edge case'lerle birlikte doğrulanabilir."
+              : "Expected behavior is verifiable with its relevant edge cases.",
+          ]
+        : input.task.acceptanceCriteria,
+      rationale: `${input.task.rationale} ${isTr ? "Revizyon talebi: " : "Revision request: "}${instruction}`,
     };
   }
 }

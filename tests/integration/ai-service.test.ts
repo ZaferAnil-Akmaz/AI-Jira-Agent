@@ -57,4 +57,22 @@ describe("AI service", () => {
       output.tasks.every((task) => task.title !== requirement && task.description !== requirement),
     ).toBe(true);
   });
+
+  it("revises only the requested task through the provider boundary", async () => {
+    const service = new AIService(new MockAIProvider());
+    const plan = await service.generateWorkBreakdown({
+      requirement: "Users should have a page where they can track their workouts.",
+      context: "",
+      language: "en",
+    });
+    const task = plan.tasks.find((item) => item.type === "frontend")!;
+    const revised = await service.reviseTask({
+      task,
+      language: "en",
+      instruction: "Make the acceptance criteria more specific.",
+    });
+    expect(revised.id).toBe(task.id);
+    expect(revised.dependsOn).toEqual(task.dependsOn);
+    expect(revised.acceptanceCriteria).toHaveLength(task.acceptanceCriteria.length + 1);
+  });
 });

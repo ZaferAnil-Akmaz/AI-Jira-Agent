@@ -1,0 +1,10 @@
+{
+  "requirement": "Users should have a page where they can track their workouts.",
+  "context": "Existing workout API, service, and persistence provide each user's workout history.",
+  "language": "en",
+  "expected": {
+    "requiredWorkstreams": ["design", "frontend", "qa"],
+    "backendRequired": false,
+    "expectedDependencies": ["frontend-workout-tracking"]
+  }
+}

@@ -14,6 +14,10 @@ describe("Jira issue mapper", () => {
         userProblem: "Need export",
         businessGoal: "Export",
         actor: "User",
+        desiredOutcome: "Download a report",
+        scope: ["Report export"],
+        explicitRequirements: ["Monthly export"],
+        implicitRequirements: [],
         functionalRequirements: [],
         nonFunctionalRequirements: [],
         risks: [],
@@ -21,6 +25,17 @@ describe("Jira issue mapper", () => {
       },
       language: "en",
       featureType: "new_feature",
+      capabilityAnalysis: [
+        { capability: "Export API", status: "missing", rationale: "An export endpoint is needed." },
+      ],
+      workstreamDecisions: [
+        { workstream: "design", status: "not_applicable", rationale: "No design work." },
+        { workstream: "frontend", status: "required", rationale: "A user action is needed." },
+        { workstream: "backend", status: "required", rationale: "Export data is needed." },
+        { workstream: "qa", status: "required", rationale: "The flow must be tested." },
+        { workstream: "analytics", status: "not_applicable", rationale: "No metric requested." },
+      ],
+      warnings: [],
       epicRecommendation: null,
       labels: ["export"],
       tasks: [
@@ -31,6 +46,8 @@ describe("Jira issue mapper", () => {
           description: "Build it",
           acceptanceCriteria: ["Button works"],
           priority: "high",
+          rationale: "Users need an export entry point.",
+          dependsOn: [],
         },
       ],
     });

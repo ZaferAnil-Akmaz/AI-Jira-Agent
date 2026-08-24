@@ -7,6 +7,7 @@ export async function GET() {
   const config = getConfig();
   const runtimeSettings = getRuntimeJiraSettings();
   return ok({
+    aiProvider: config.AI_PROVIDER,
     jiraProvider: runtimeSettings ? "rest" : config.JIRA_PROVIDER,
     jiraProjectKey: runtimeSettings?.projectKey ?? config.JIRA_PROJECT_KEY,
   });

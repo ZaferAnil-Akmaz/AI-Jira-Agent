@@ -1,0 +1,10 @@
+{
+  "requirement": "Kullanıcıların beslenme ve antrenman takipleri için yeni bir sayfa geliştirmeyi istiyorum.",
+  "context": "Mevcut antrenman API servisi ve persistence yapısı kullanıcı verisini sağlıyor.",
+  "language": "tr",
+  "expected": {
+    "requiredWorkstreams": ["design", "frontend", "qa"],
+    "backendRequired": false,
+    "expectedDependencies": ["frontend-nutrition-tracking"]
+  }
+}

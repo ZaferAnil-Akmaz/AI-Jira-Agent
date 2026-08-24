@@ -1,6 +1,6 @@
 # AI Product Jira Agent
 
-Turn product requirements into reviewable, Jira-ready work items—with a human approving every creation.
+**Turn ambiguous product requirements into explainable, reviewable, Jira-ready delivery plans with AI.**
 
 [Documentation](docs/architecture.md) · [MIT License](LICENSE)
 
@@ -24,19 +24,44 @@ See the **LICENSE** file for details.
 
 ---
 
-## Overview
+## Problem
 
-AI Product Jira Agent is an open-source product-management copilot. It turns a plain-language requirement into a structured user story, acceptance criteria, and FE/BE/QA/analytics/design tasks. The result is always editable and is never sent to Jira until a person explicitly approves it.
+Product requirements are often too vague to directly become implementation-ready Jira work. A PM must reason about scope, data and backend needs, frontend behavior, design, QA, analytics, dependencies, risks, and ambiguity before tickets are useful.
 
-## Why?
+## Solution
 
-Turning an approved product idea into consistently scoped delivery work is repetitive and error-prone. This tool accelerates the first draft while keeping product judgment and Jira writes under human control.
+AI Product Jira Agent is an open-source Product Planning Engine. It turns a plain-language requirement into an explainable delivery plan: requirement analysis, capability checks, workstream decisions, rationale-rich tasks, task-to-task dependencies, semantic warnings, and an editable Jira preview. Jira is the execution destination; people approve every write.
+
+## Example
+
+**Input:** `Users should have a page where they can track their workouts.`
+
+```text
+Requirement
+  ↓
+AI analysis + assumptions
+  ↓
+Capability analysis (workout API: unknown / requires validation)
+  ↓
+Delivery plan (Design → Backend → Frontend → QA)
+  ↓
+Task rationale, acceptance criteria, and dependencies
+  ↓
+Human review and optional task revision
+  ↓
+Jira creation
+```
+
+If a supplied repository context confirms an existing workout API and persistence, the plan omits net-new backend work and explains why.
 
 ## Features
 
-- Structured requirement analysis and validated AI output
-- User stories, acceptance criteria, and workstream decomposition
-- Review, edit, delete, add, reprioritize, and reorder tasks
+- Requirement analysis with assumptions, risks, and meaningful ambiguities
+- Capability analysis for API, data, persistence, authorization, frontend, and analytics
+- Explicit Design/Frontend/Backend/QA/Analytics workstream decisions with rationale
+- Professional task descriptions, task rationale, stable task IDs, and task-to-task dependencies
+- Deterministic semantic planning validation and review warnings
+- Review, edit, delete, add, reorder, reprioritize, and revise individual tasks with AI
 - Jira project context and similar-issue discovery APIs
 - Server-side Jira integration and partial-failure reporting
 - Idempotent creation requests, rate limits, request IDs, and safe logging
@@ -54,7 +79,19 @@ See [architecture documentation](docs/architecture.md) for the detailed design.
 
 ## Demo
 
-_A product walkthrough video/GIF will be added in a future release._
+```text
+Requirement → AI Analysis → Capability Analysis → Delivery Plan → Human Review → Jira Creation
+```
+
+Add a short product GIF or video to [`docs/demo/`](docs/demo/) when available. The application itself is the authoritative interactive demo.
+
+## GitHub metadata
+
+Recommended repository description: **AI Product Planning Agent that turns product requirements into explainable, reviewable, Jira-ready delivery plans.**
+
+Recommended topics: `ai`, `ai-agent`, `product-management`, `product-manager`, `jira`, `atlassian`, `openai`, `llm`, `nextjs`, `typescript`, `product-planning`, `developer-tools`.
+
+These are GitHub repository settings and must be applied manually in the GitHub UI.
 
 ## Quick start
 
@@ -95,6 +132,7 @@ npm run dev
 npm run lint
 npm run typecheck
 npm run test
+npm run eval
 npm run test:e2e
 npm run build
 ```
@@ -109,7 +147,7 @@ Environment variables are injected at runtime; do not put secrets in Docker file
 
 ## Testing
 
-Unit tests cover schemas, configuration, and issue mapping. Integration tests exercise the service boundaries with mock providers. The Playwright flow covers requirement entry through mock Jira creation.
+Unit tests cover schemas, semantic planning validation, configuration, idempotency, and issue mapping. Integration tests exercise AI generation and targeted task revision. Playwright covers requirement entry through mock Jira creation. `npm run eval` runs deterministic planning scenarios to guard backend decisions, dependencies, requirement leakage, and task relevance.
 
 ## Security
 
@@ -117,9 +155,9 @@ Review [SECURITY.md](SECURITY.md) and [security documentation](docs/security.md)
 
 ## Roadmap
 
-- Persisted configuration and idempotency storage
+- Persisted configuration and shared idempotency storage
 - Jira hierarchy and component selection UI
-- Additional AI providers and Jira MCP provider
+- Jira OAuth and project-specific issue type mapping
 - Organization authentication and audit history
 
 ## Contributing

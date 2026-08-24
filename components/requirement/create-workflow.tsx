@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import type { OutputLanguage, TaskType, WorkBreakdown, WorkTask } from "@/types/domain";
 
 type Api<T> = { success: true; data: T } | { success: false; error: { message: string } };
-type PublicConfig = { jiraProvider: "mock" | "rest"; jiraProjectKey: string };
+type PublicConfig = {
+  aiProvider: "mock" | "openai" | "gemini";
+  jiraProvider: "mock" | "rest";
+  jiraProjectKey: string;
+};
 type CreationResult = {
   epic?: { key: string; url: string };
   created: Array<{ key: string; url: string }>;
@@ -21,6 +25,19 @@ const typeLabel: Record<TaskType, string> = {
   qa: "QA",
   analytics: "Analytics",
 };
+const initialTaskOrder: Record<TaskType, number> = {
+  backend: 0,
+  frontend: 1,
+  qa: 2,
+  design: 3,
+  analytics: 4,
+};
+
+function sortTasksForInitialReview(tasks: WorkTask[]): WorkTask[] {
+  return [...tasks].sort(
+    (left, right) => initialTaskOrder[left.type] - initialTaskOrder[right.type],
+  );
+}
 
 async function request<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -37,11 +54,16 @@ function TaskCard({
   task,
   onChange,
   onDelete,
+  onMove,
+  onImprove,
 }: {
   task: WorkTask;
   onChange: (next: WorkTask) => void;
   onDelete: () => void;
+  onMove: (direction: "up" | "down") => void;
+  onImprove: (instruction: string) => void;
 }) {
+  const [revisionInstruction, setRevisionInstruction] = useState("");
   return (
     <article className="task-card">
       <div className="task-card__top">
@@ -60,7 +82,8 @@ function TaskCard({
       <label>
         Description
         <textarea
-          rows={4}
+          className="task-card__description"
+          rows={7}
           value={task.description}
           onChange={(event) => onChange({ ...task, description: event.target.value })}
         />
@@ -94,6 +117,14 @@ function TaskCard({
         </label>
       </div>
       <label>
+        Why this task exists
+        <textarea
+          rows={2}
+          value={task.rationale}
+          onChange={(event) => onChange({ ...task, rationale: event.target.value })}
+        />
+      </label>
+      <label>
         Acceptance criteria
         <textarea
           rows={3}
@@ -109,14 +140,35 @@ function TaskCard({
           }
         />
       </label>
-      {task.dependencies?.length ? (
-        <p className="hint">
-          Depends on:{" "}
-          {task.dependencies
-            .map((dependency) => typeLabel[dependency as TaskType] ?? dependency)
-            .join(", ")}
-        </p>
-      ) : null}
+      <div className="inline-form task-actions">
+        <button className="secondary" type="button" onClick={() => onMove("up")}>
+          Move up
+        </button>
+        <button className="secondary" type="button" onClick={() => onMove("down")}>
+          Move down
+        </button>
+      </div>
+      <div className="improve-task">
+        <label>
+          Ask AI to improve this task
+          <input
+            value={revisionInstruction}
+            placeholder="e.g. Make acceptance criteria more specific"
+            onChange={(event) => setRevisionInstruction(event.target.value)}
+          />
+        </label>
+        <button
+          className="secondary"
+          type="button"
+          disabled={revisionInstruction.trim().length < 5}
+          onClick={() => {
+            onImprove(revisionInstruction);
+            setRevisionInstruction("");
+          }}
+        >
+          Improve task
+        </button>
+      </div>
     </article>
   );
 }
@@ -133,22 +185,53 @@ export function CreateWorkflow() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string>();
   const [result, setResult] = useState<CreationResult>();
+  const [creationOperationId, setCreationOperationId] = useState<string>();
   const [projectKey, setProjectKey] = useState("PROD");
+  const [aiProvider, setAIProvider] = useState<PublicConfig["aiProvider"]>("mock");
   const [jiraProvider, setJiraProvider] = useState<"mock" | "rest">("mock");
   useEffect(() => {
     void request<PublicConfig>("/api/config", { method: "GET" })
       .then((config) => {
+        setAIProvider(config.aiProvider);
         setProjectKey(config.jiraProjectKey);
         setJiraProvider(config.jiraProvider);
       })
       .catch(() => undefined);
   }, []);
-  const updateTask = (index: number, task: WorkTask) =>
+  const updateTask = (index: number, task: WorkTask) => {
+    setCreationOperationId(undefined);
     setPlan((current) =>
       current
         ? { ...current, tasks: current.tasks.map((item, i) => (i === index ? task : item)) }
         : current,
     );
+  };
+  const moveTask = (index: number, direction: "up" | "down") =>
+    setPlan((current) => {
+      if (!current) return current;
+      const target = direction === "up" ? index - 1 : index + 1;
+      if (target < 0 || target >= current.tasks.length) return current;
+      const tasks = [...current.tasks];
+      [tasks[index], tasks[target]] = [tasks[target], tasks[index]];
+      return { ...current, tasks };
+    });
+  const improveTask = async (index: number, instruction: string) => {
+    const task = plan?.tasks[index];
+    if (!task) return;
+    setLoading(true);
+    setError(undefined);
+    try {
+      const improved = await request<WorkTask>("/api/ai/revise-task", {
+        method: "POST",
+        body: JSON.stringify({ task, instruction, language }),
+      });
+      updateTask(index, improved);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Task improvement failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
   const generate = async (selectedLanguage = language) => {
     setLoading(true);
     setError(undefined);
@@ -158,9 +241,10 @@ export function CreateWorkflow() {
         method: "POST",
         body: JSON.stringify({ requirement, context, language: selectedLanguage }),
       });
-      setPlan(next);
+      setPlan({ ...next, tasks: sortTasksForInitialReview(next.tasks) });
       setLabels(next.labels);
       setCreateEpic(Boolean(next.epicRecommendation?.recommended));
+      setCreationOperationId(id());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Generation failed.");
     } finally {
@@ -183,15 +267,18 @@ export function CreateWorkflow() {
           : undefined;
       const issues = plan.tasks.map((task) => ({
         summary: task.title,
-        description: `${task.description}\n\nAcceptance criteria:\n${task.acceptanceCriteria.map((item) => `- ${item}`).join("\n")}`,
+        description: `${task.description}\n\nWhy this task exists:\n${task.rationale}\n\nDepends on:\n${task.dependsOn.length ? task.dependsOn.map((item) => `- ${item}`).join("\n") : "- None"}\n\nAcceptance criteria:\n${task.acceptanceCriteria.map((item) => `- ${item}`).join("\n")}`,
         issueType: "Task",
+        workstream: task.type,
         priority: task.priority,
         labels,
       }));
+      const operationId = creationOperationId ?? id();
+      setCreationOperationId(operationId);
       setResult(
         await request<CreationResult>("/api/jira/issues", {
           method: "POST",
-          headers: { "Idempotency-Key": id() },
+          headers: { "Idempotency-Key": operationId },
           body: JSON.stringify({ projectKey, epic, issues }),
         }),
       );
@@ -207,10 +294,14 @@ export function CreateWorkflow() {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "");
-    if (next && !labels.includes(next)) setLabels([...labels, next]);
+    if (next && !labels.includes(next)) {
+      setCreationOperationId(undefined);
+      setLabels([...labels, next]);
+    }
     setLabelInput("");
   };
-  const addTask = () =>
+  const addTask = () => {
+    setCreationOperationId(undefined);
     setPlan((current) =>
       current
         ? {
@@ -224,11 +315,14 @@ export function CreateWorkflow() {
                 description: "Describe the implementation work.",
                 acceptanceCriteria: ["Define expected behavior."],
                 priority: "medium",
+                rationale: "Custom work item added during human review.",
+                dependsOn: [],
               },
             ],
           }
         : current,
     );
+  };
   return (
     <>
       <div className="workflow">
@@ -310,6 +404,13 @@ export function CreateWorkflow() {
             until Settings is connected.
           </p>
         ) : null}
+        {aiProvider === "mock" ? (
+          <p className="mock-notice">
+            Mock AI is enabled; generated plans are deterministic examples. Configure
+            <code> AI_PROVIDER=gemini </code>and <code>GEMINI_API_KEY</code> for Senior PM-level
+            Gemini analysis.
+          </p>
+        ) : null}
         <button
           className="primary"
           type="button"
@@ -335,97 +436,66 @@ export function CreateWorkflow() {
               Add task
             </button>
           </div>
-          <div className="summary-grid">
-            <article className="summary-card">
-              <p className="eyebrow">Feature analysis</p>
-              <h3>{plan.analysis.businessGoal}</h3>
-              <p>
-                <strong>Actor:</strong> {plan.analysis.actor}
-              </p>
-              <p>
-                <strong>Problem:</strong> {plan.analysis.userProblem}
-              </p>
-            </article>
-            <article className="summary-card">
-              <p className="eyebrow">Dependencies</p>
-              <ul>
-                {plan.dependencies.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-              {plan.assumptions.length ? (
-                <>
-                  <p className="eyebrow">Assumptions</p>
-                  <ul>
-                    {plan.assumptions.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-              {plan.analysis.risks.length ? (
-                <>
-                  <p className="eyebrow">Risks</p>
-                  <ul>
-                    {plan.analysis.risks.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-              {plan.analysis.ambiguities.length ? (
-                <>
-                  <p className="eyebrow">Ambiguities</p>
-                  <ul>
-                    {plan.analysis.ambiguities.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-            </article>
-          </div>
+          {plan.warnings.length ? (
+            <section className="planning-warnings" aria-label="Planning warnings">
+              <p className="eyebrow">Semantic warnings</p>
+              {plan.warnings.map((warning) => (
+                <p key={`${warning.code}-${warning.taskId ?? "plan"}`}>⚠ {warning.message}</p>
+              ))}
+            </section>
+          ) : null}
           {plan.epicRecommendation ? (
             <article className="summary-card epic-card">
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={createEpic}
-                  onChange={(event) => setCreateEpic(event.target.checked)}
-                />
-                Create Epic
-              </label>
+              <div className="epic-card__header">
+                <h3 className="epic-card__title">Create Epic</h3>
+                <label className="toggle">
+                  <span className="sr-only">Create Epic</span>
+                  <input
+                    aria-label="Create Epic"
+                    type="checkbox"
+                    checked={createEpic}
+                    onChange={(event) => {
+                      setCreationOperationId(undefined);
+                      setCreateEpic(event.target.checked);
+                    }}
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                </label>
+              </div>
               <label>
                 Epic title
                 <input
                   value={plan.epicRecommendation.title}
                   disabled={!createEpic}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setCreationOperationId(undefined);
                     setPlan({
                       ...plan,
                       epicRecommendation: {
                         ...plan.epicRecommendation!,
                         title: event.target.value,
                       },
-                    })
-                  }
+                    });
+                  }}
                 />
               </label>
               <label>
                 Epic description
                 <textarea
+                  className="epic-card__description"
                   rows={3}
                   disabled={!createEpic}
                   value={plan.epicRecommendation.description}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setCreationOperationId(undefined);
                     setPlan({
                       ...plan,
                       epicRecommendation: {
                         ...plan.epicRecommendation!,
                         description: event.target.value,
                       },
-                    })
-                  }
+                    });
+                  }}
                 />
               </label>
             </article>
@@ -438,7 +508,10 @@ export function CreateWorkflow() {
                   type="button"
                   className="chip"
                   key={label}
-                  onClick={() => setLabels(labels.filter((item) => item !== label))}
+                  onClick={() => {
+                    setCreationOperationId(undefined);
+                    setLabels(labels.filter((item) => item !== label));
+                  }}
                 >
                   {label} ×
                 </button>
@@ -461,9 +534,12 @@ export function CreateWorkflow() {
                 key={task.id}
                 task={task}
                 onChange={(next) => updateTask(index, next)}
-                onDelete={() =>
-                  setPlan({ ...plan, tasks: plan.tasks.filter((_, i) => i !== index) })
-                }
+                onDelete={() => {
+                  setCreationOperationId(undefined);
+                  setPlan({ ...plan, tasks: plan.tasks.filter((_, i) => i !== index) });
+                }}
+                onMove={(direction) => moveTask(index, direction)}
+                onImprove={(instruction) => void improveTask(index, instruction)}
               />
             ))}
           </div>
