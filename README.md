@@ -163,3 +163,6 @@ Review [SECURITY.md](SECURITY.md) and [security documentation](docs/security.md)
 ## Contributing
 
 Contributions are welcome; read [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and the [development guide](docs/development.md).
+
+<img width="1226" height="916" alt="Screen1" src="https://github.com/user-attachments/assets/aef001b8-9673-4bfe-a589-0a85a62ab7ec" />
+
